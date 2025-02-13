@@ -1,0 +1,274 @@
+openapi: 3.0.0
+info:
+  title: API Avito shop
+  version: 1.0.0
+servers:
+- url: http://localhost:8080
+security:
+- BearerAuth: []
+paths:
+  /api/info:
+    get:
+      summary: "Получить информацию о монетах, инвентаре и истории транзакций."
+      responses:
+        "200":
+          description: Успешный ответ.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InfoResponse"
+        "400":
+          description: Неверный запрос.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Неавторизован.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Внутренняя ошибка сервера.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      security:
+      - BearerAuth: []
+  /api/sendCoin:
+    post:
+      summary: Отправить монеты другому пользователю.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendCoinRequest"
+        required: true
+      responses:
+        "200":
+          description: Успешный ответ.
+        "400":
+          description: Неверный запрос.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Неавторизован.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Внутренняя ошибка сервера.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      security:
+      - BearerAuth: []
+  /api/buy/{item}:
+    get:
+      summary: Купить предмет за монеты.
+      parameters:
+      - name: item
+        in: path
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Успешный ответ.
+        "400":
+          description: Неверный запрос.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Неавторизован.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Внутренняя ошибка сервера.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      security:
+      - BearerAuth: []
+  /api/auth:
+    post:
+      summary: Аутентификация и получение JWT-токена. При первой аутентификации пользователь
+        создается автоматически.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthRequest"
+        required: true
+      responses:
+        "200":
+          description: Успешная аутентификация.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Неверный запрос.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Неавторизован.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Внутренняя ошибка сервера.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    InfoResponse:
+      type: object
+      properties:
+        coins:
+          type: integer
+          description: Количество доступных монет.
+        inventory:
+          type: array
+          items:
+            $ref: "#/components/schemas/InfoResponse_inventory"
+        coinHistory:
+          $ref: "#/components/schemas/InfoResponse_coinHistory"
+      example:
+        coins: 0
+        coinHistory:
+          received:
+          - amount: 1
+            fromUser: fromUser
+          - amount: 1
+            fromUser: fromUser
+          sent:
+          - toUser: toUser
+            amount: 5
+          - toUser: toUser
+            amount: 5
+        inventory:
+        - quantity: 6
+          type: type
+        - quantity: 6
+          type: type
+    ErrorResponse:
+      type: object
+      properties:
+        errors:
+          type: string
+          description: "Сообщение об ошибке, описывающее проблему."
+    AuthRequest:
+      required:
+      - password
+      - username
+      type: object
+      properties:
+        username:
+          type: string
+          description: Имя пользователя для аутентификации.
+        password:
+          type: string
+          description: Пароль для аутентификации.
+          format: password
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT-токен для доступа к защищенным ресурсам.
+      example:
+        token: token
+    SendCoinRequest:
+      required:
+      - amount
+      - toUser
+      type: object
+      properties:
+        toUser:
+          type: string
+          description: "Имя пользователя, которому нужно отправить монеты."
+        amount:
+          type: integer
+          description: "Количество монет, которые необходимо отправить."
+    InfoResponse_inventory:
+      type: object
+      properties:
+        type:
+          type: string
+          description: Тип предмета.
+        quantity:
+          type: integer
+          description: Количество предметов.
+      example:
+        quantity: 6
+        type: type
+    InfoResponse_coinHistory_received:
+      type: object
+      properties:
+        fromUser:
+          type: string
+          description: "Имя пользователя, который отправил монеты."
+        amount:
+          type: integer
+          description: Количество полученных монет.
+      example:
+        amount: 1
+        fromUser: fromUser
+    InfoResponse_coinHistory_sent:
+      type: object
+      properties:
+        toUser:
+          type: string
+          description: "Имя пользователя, которому отправлены монеты."
+        amount:
+          type: integer
+          description: Количество отправленных монет.
+      example:
+        toUser: toUser
+        amount: 5
+    InfoResponse_coinHistory:
+      type: object
+      properties:
+        received:
+          type: array
+          items:
+            $ref: "#/components/schemas/InfoResponse_coinHistory_received"
+        sent:
+          type: array
+          items:
+            $ref: "#/components/schemas/InfoResponse_coinHistory_sent"
+      example:
+        received:
+        - amount: 1
+          fromUser: fromUser
+        - amount: 1
+          fromUser: fromUser
+        sent:
+        - toUser: toUser
+          amount: 5
+        - toUser: toUser
+          amount: 5
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
