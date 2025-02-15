@@ -9,25 +9,301 @@
 package swagger
 
 import (
+	"context"
+	"encoding/json"
+	"log"
 	"net/http"
+
+	"github.com/Experticon/avito_2025winter/internal/constants"
+	"github.com/Experticon/avito_2025winter/internal/jwtutil"
+	"github.com/Experticon/avito_2025winter/internal/repository"
+	"github.com/Experticon/avito_2025winter/internal/validation"
+	"github.com/gorilla/mux"
+	"github.com/jackc/pgx/v4"
+	"golang.org/x/crypto/bcrypt"
 )
 
-func ApiAuthPost(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusOK)
+func ApiAuthPost(repo *repository.Repository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req AuthRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"errors": "Invalid request"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Валидация имени пользователя и пароля
+		if err := validation.ValidateUsername(req.Username); err != nil {
+			http.Error(w, `{"errors": "`+err.Error()+`"}`, http.StatusBadRequest)
+			return
+		}
+
+		if err := validation.ValidatePassword(req.Password); err != nil {
+			http.Error(w, `{"errors": "`+err.Error()+`"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Проверяем, есть ли пользователь в БД
+		userID, hashedPassword, err := repo.GetUserByLogin(context.Background(), req.Username)
+		log.Printf("[ERROR] Error finding user %s: %v", userID, err)
+		// Проверяем, если нет пользователя (например, userID пустой) — продолжаем создавать пользователя
+		if err != nil && err != pgx.ErrNoRows { // Если это не ошибка отсутствия пользователя
+			http.Error(w, `{"errors": "Database error"}`, http.StatusInternalServerError)
+			return
+		}
+
+		if userID == "" {
+			// Если пользователя нет, хешируем пароль и создаём пользователя
+			hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+			if err != nil {
+				http.Error(w, `{"errors": "Hashing error"}`, http.StatusInternalServerError)
+				return
+			}
+
+			// Создаём пользователя
+			if err := repo.CreateUser(context.Background(), req.Username, string(hashedPassword)); err != nil {
+				http.Error(w, `{"errors": "Failed to create user"}`, http.StatusInternalServerError)
+				return
+			}
+
+			token, err := jwtutil.GenerateJWT(req.Username)
+			if err != nil {
+				http.Error(w, `{"errors": "Token generation error"}`, http.StatusInternalServerError)
+				return
+			}
+
+			// Отправляем токен
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(AuthResponse{Token: token})
+			return
+		}
+
+		// Если пользователь существует, проверяем пароль
+		if err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(req.Password)); err != nil {
+			http.Error(w, `{"errors": "Invalid credentials"}`, http.StatusUnauthorized)
+			return
+		}
+
+		// Генерируем JWT-токен для существующего пользователя
+		token, err := jwtutil.GenerateJWT(req.Username)
+		if err != nil {
+			http.Error(w, `{"errors": "Token generation error"}`, http.StatusInternalServerError)
+			return
+		}
+
+		// Отправляем токен
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(AuthResponse{Token: token})
+	}
 }
 
-func ApiBuyItemGet(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusOK)
+func ApiBuyItemGet(repo *repository.Repository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+		// Получаем username из контекста (middleware уже проверил токен)
+		username, ok := r.Context().Value("username").(string)
+		if !ok || username == "" {
+			http.Error(w, `{"error": "Unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
+		vars := mux.Vars(r)
+		item := vars["item"]
+
+		// Проверяем, есть ли товар в MerchPrices
+		price, exists := constants.MerchPrices[item]
+		if !exists {
+			http.Error(w, `{"error": "Item not found"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Получаем пользователя по логину
+		user_ID, _, err := repo.GetUserByLogin(r.Context(), username)
+		if err != nil {
+			log.Printf("[ERROR] Failed to get user %s: %v", username, err)
+			http.Error(w, `{"error": "User not found"}`, http.StatusInternalServerError)
+			return
+		}
+
+		// Получаем баланс пользователя
+		coins, err := repo.GetUserCoins(r.Context(), user_ID)
+		if err != nil {
+			log.Printf("[ERROR] Failed to get user coins %s: %v", username, err)
+			http.Error(w, `{"error": "Failed to fetch balance"}`, http.StatusInternalServerError)
+			return
+		}
+
+		// Проверяем, хватает ли монет
+		if coins < int32(price) {
+			http.Error(w, `{"error": "Not enough coins"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Вычитаем монеты у пользователя
+		newBalance, err := repo.SubtractUserCoins(r.Context(), user_ID, price)
+		if err != nil {
+			log.Printf("[ERROR] Failed to subtract coins for user %s: %v", username, err)
+			http.Error(w, `{"error": "Not enough coins"}`, http.StatusBadRequest)
+			return
+		}
+
+		log.Printf("[INFO] User %s bought item %s, new balance: %d", username, item, newBalance)
+
+		err = repo.AddItemToInventory(r.Context(), user_ID, item, 1)
+		if err != nil {
+			http.Error(w, `{"error": "Failed to update inventory"}`, http.StatusInternalServerError)
+			return
+		}
+		log.Printf("[INFO] Item added to inventory for user %s: %s", username, item)
+
+		// Успешный ответ (пока без списания монет и добавления в инвентарь)
+		w.WriteHeader(http.StatusOK)
+	}
 }
 
-func ApiInfoGet(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusOK)
+func ApiInfoGet(repo *repository.Repository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Получаем username из контекста (middleware уже проверил токен)
+		username, ok := r.Context().Value("username").(string)
+		if !ok || username == "" {
+			http.Error(w, `{"error": "Unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		// Проверяем, есть ли пользователь в БД
+		userID, _, _ := repo.GetUserByLogin(context.Background(), username)
+
+		// Получаем информацию о пользователе из базы данных
+		coins, err := repo.GetUserCoins(context.Background(), userID)
+		if err != nil {
+			http.Error(w, `{"errors": "Database error"}`, http.StatusInternalServerError)
+			return
+		}
+
+		transactions, err := repo.GetCoinHistory(context.Background(), userID)
+		if err != nil {
+			http.Error(w, `{"errors": "Error fetching coin history"}`, http.StatusInternalServerError)
+			return
+		}
+
+		var received []InfoResponseCoinHistoryReceived
+		var sent []InfoResponseCoinHistorySent
+
+		for _, t := range transactions {
+			if t.FromUser == username {
+				sent = append(sent, InfoResponseCoinHistorySent{
+					ToUser: t.ToUser,
+					Amount: t.Amount,
+				})
+			} else {
+				received = append(received, InfoResponseCoinHistoryReceived{
+					FromUser: t.FromUser,
+					Amount:   t.Amount,
+				})
+			}
+		}
+
+		// Получаем инвентарь пользователя
+		inventory, err := repo.GetUserInventory(context.Background(), userID)
+		if err != nil {
+			log.Printf("[ERROR] Error fetching inventory for user %s: %v", userID, err)
+			http.Error(w, `{"errors": "Error fetching inventory"}`, http.StatusInternalServerError)
+			return
+		}
+
+		log.Printf("[DEBUG] Inventory for user %s: %v", userID, inventory)
+
+		// Формируем InfoResponse для инвентаря
+		inventoryResponse := []InfoResponseInventory{}
+		for _, item := range inventory {
+			inventoryResponse = append(inventoryResponse, InfoResponseInventory{
+				Quantity: int32(item.Quantity),
+				Type_:    item.Type,
+			})
+		}
+
+		// Формируем ответ
+		response := InfoResponse{
+			Coins: coins,
+			CoinHistory: &InfoResponseCoinHistory{
+				Received: received,
+				Sent:     sent,
+			},
+			Inventory: inventoryResponse, // Используем отформатированный инвентарь
+		}
+
+		// Устанавливаем заголовок и отправляем ответ
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(response)
+	}
 }
 
-func ApiSendCoinPost(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusOK)
+func ApiSendCoinPost(repo *repository.Repository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+		// Извлекаем тело запроса
+		var req SendCoinRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Проверка: amount не может быть меньше нуля
+		if req.Amount < 0 {
+			http.Error(w, `{"error": "Amount must be greater than or equal to 0"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Получаем username из контекста (middleware уже проверил токен)
+		username, ok := r.Context().Value("username").(string)
+		if !ok || username == "" {
+			http.Error(w, `{"error": "Unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
+		// Получаем ID пользователя отправителя
+		userID, _, err := repo.GetUserByLogin(context.Background(), username)
+		if err != nil {
+			http.Error(w, `{"error": "User not found"}`, http.StatusNotFound)
+			return
+		}
+
+		// Проверяем наличие получателя
+		toUserID, _, err := repo.GetUserByLogin(context.Background(), req.ToUser)
+		if err != nil {
+			http.Error(w, `{"error": "Recipient user not found"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Проверяем, что отправитель и получатель — разные пользователи
+		if userID == toUserID {
+			http.Error(w, `{"error": "Cannot send coins to yourself"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Получаем количество монет у отправителя
+		senderCoins, err := repo.GetUserCoins(context.Background(), userID)
+		if err != nil {
+			http.Error(w, `{"error": "Failed to retrieve sender's coin balance"}`, http.StatusInternalServerError)
+			return
+		}
+
+		// Проверка: у отправителя достаточно монет для перевода
+		if senderCoins < req.Amount {
+			http.Error(w, `{"error": "Insufficient coins"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Выполняем транзакцию: списываем монеты у отправителя и зачисляем их получателю
+		if err := repo.TransferCoins(context.Background(), userID, toUserID, req.Amount); err != nil {
+			http.Error(w, `{"error": "Failed to transfer coins"}`, http.StatusInternalServerError)
+			return
+		}
+
+		// Отправляем успешный ответ
+		w.WriteHeader(http.StatusOK)
+	}
 }

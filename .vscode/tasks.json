@@ -1,0 +1,18 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Run Server",
+        "type": "shell",
+        "command": "go",
+        "args": ["run", "./cmd/main.go"],
+        "group": {
+          "kind": "build",
+          "isDefault": true
+        },
+        "problemMatcher": [],
+        "detail": "Запуск main.go для Avito Shop сервера."
+      }
+    ]
+  }
+  

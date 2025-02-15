@@ -30,7 +30,7 @@ func main() {
 	defer dbClient.Close()
 
 	// Создание маршрутизатора
-	router := sw.NewRouter()
+	router := sw.NewRouter(dbClient)
 
 	// Запуск сервера
 	log.Fatal(http.ListenAndServe(":8080", router))

@@ -14,24 +14,37 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
+	"github.com/jackc/pgx/v4/pgxpool"
+
+	"github.com/Experticon/avito_2025winter/internal/jwtutil"
+	"github.com/Experticon/avito_2025winter/internal/repository"
 )
 
 type Route struct {
 	Name        string
 	Method      string
 	Pattern     string
-	HandlerFunc http.HandlerFunc
+	HandlerFunc func(repo *repository.Repository) http.HandlerFunc
 }
 
 type Routes []Route
 
-func NewRouter() *mux.Router {
+func NewRouter(db *pgxpool.Pool) *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
+
+	repo := repository.NewRepository(db)
 
 	for _, route := range routes {
 		var handler http.Handler
-		handler = route.HandlerFunc
+		handler = route.HandlerFunc(repo)
+
+		// Добавляем логгер
 		handler = Logger(handler, route.Name)
+
+		// Применяем jwtutil.AuthMiddleware ко всем, кроме ApiAuthPost
+		if route.Name != "ApiAuthPost" {
+			handler = jwtutil.AuthMiddleware(handler)
+		}
 
 		router.
 			Methods(route.Method).
@@ -51,8 +64,10 @@ func NewRouter() *mux.Router {
 	return router
 }
 
-func Index(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Hello World!")
+func Index(repo *repository.Repository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "Hello World!")
+	}
 }
 
 var routes = Routes{
