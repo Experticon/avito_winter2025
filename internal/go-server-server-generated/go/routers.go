@@ -11,6 +11,7 @@ package swagger
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gorilla/mux"
@@ -53,12 +54,20 @@ func NewRouter(db *pgxpool.Pool) *mux.Router {
 			Handler(handler)
 	}
 
+	swaggerPath := "../pkg/swagger-ui/dist"
+	swaggerYAMLPath := "../internal/go-server-server-generated/api/swagger.yaml"
+
+	if os.Getenv("DOCKER_ENV") == "true" {
+		swaggerPath = "/app/swagger-ui"
+		swaggerYAMLPath = "/app/swagger.yaml"
+	}
+
 	// Раздаём Swagger UI
-	router.PathPrefix("/swagger/").Handler(http.StripPrefix("/swagger/", http.FileServer(http.Dir("../pkg/swagger-ui/dist"))))
+	router.PathPrefix("/swagger/").Handler(http.StripPrefix("/swagger/", http.FileServer(http.Dir(swaggerPath))))
 
 	// Раздаём swagger.yaml
 	router.HandleFunc("/swagger.yaml", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "../internal/go-server-server-generated/api/swagger.yaml")
+		http.ServeFile(w, r, swaggerYAMLPath)
 	}).Methods("GET")
 
 	return router

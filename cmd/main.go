@@ -12,6 +12,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
 
 	sw "github.com/Experticon/avito_2025winter/internal/go-server-server-generated/go"
 
@@ -23,7 +24,14 @@ func main() {
 
 	// Подключение к PostgreSQL
 	ctx := context.Background()
-	dbClient, err := postgresql.NewClient(ctx, 5, "localhost", "5432", "postgres", "1234", "avito_shop") // Параметры подключения можно настроить напрямую
+	var dbHost string
+	if os.Getenv("DOCKER_ENV") == "true" {
+		dbHost = "db" // Имя сервиса в Docker
+	} else {
+		dbHost = "localhost" // Локальная машина
+	}
+
+	dbClient, err := postgresql.NewClient(ctx, 5, dbHost, "5432", "postgres", "1234", "avito_shop")
 	if err != nil {
 		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
 	}
