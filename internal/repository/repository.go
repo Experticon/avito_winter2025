@@ -1,5 +1,11 @@
 package repository
 
+/**
+ * @package repository
+ * Файл repository.go
+ * Занимается взаимодействием с базой данных
+ */
+
 import (
 	"context"
 	"database/sql"

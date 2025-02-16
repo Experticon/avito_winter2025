@@ -1,5 +1,10 @@
 package repository
 
+/**
+ * @package repository
+ * Файл sql_queries.go
+ * Хранит все sql запросы как константы
+ */
 const (
 	QueryCreateUser = `
 		INSERT INTO users (id, username, password_hash) 

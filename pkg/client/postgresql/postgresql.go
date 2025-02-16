@@ -1,5 +1,11 @@
 package postgresql
 
+/**
+ * @package postgresql
+ * Файл postgresql.go
+ * Подключает клиент PostgreSQL к серверу
+ */
+
 import (
 	"context"
 	"fmt"

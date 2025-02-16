@@ -1,5 +1,11 @@
 package jwtutil
 
+/**
+ * @package jwtutil
+ * Файл middleware.go
+ * Парсит и проверяет JWT токен, хранящийся в BearerAuth
+ */
+
 import (
 	"context"
 	"log"

@@ -8,6 +8,12 @@
  */
 package swagger
 
+/**
+ * @package swagger
+ * Файл routers.go
+ * Является собирательным объектом всех путей в API
+ */
+
 import (
 	"fmt"
 	"net/http"

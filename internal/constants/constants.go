@@ -1,5 +1,10 @@
 package constants
 
+/**
+ * @package constants
+ * Содержит в себе вводные данные (типы мерча и их цена)
+ */
+
 var MerchPrices = map[string]int{
 	"t-shirt":    80,
 	"cup":        20,

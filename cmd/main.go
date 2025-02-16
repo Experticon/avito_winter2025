@@ -19,6 +19,11 @@ import (
 	"github.com/Experticon/avito_2025winter/pkg/client/postgresql"
 )
 
+/**
+ * Тестовое задание для стажёра Backend-направления (зимняя волна 2025)
+ * @author Абросимов Константин
+ */
+
 func main() {
 	log.Println("Server started on :8080")
 

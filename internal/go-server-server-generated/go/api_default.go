@@ -8,6 +8,12 @@
  */
 package swagger
 
+/**
+ * @package swagger
+ * Файл api_default.go
+ * Содержит в себе бизнес логику сервера
+ */
+
 import (
 	"context"
 	"encoding/json"
@@ -22,6 +28,12 @@ import (
 	"github.com/jackc/pgx/v4"
 	"golang.org/x/crypto/bcrypt"
 )
+
+/**
+ * @func ApiAuthPost
+ * Совершает аутентификацию полььзователя. Здесь же хэширует пароли, используя bcrypt.
+ * При первой аутентификации создаёт пользователя в бд, в любом случае выдаёт JWT токен
+ */
 
 func ApiAuthPost(repo *repository.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -98,6 +110,12 @@ func ApiAuthPost(repo *repository.Repository) http.HandlerFunc {
 	}
 }
 
+/**
+ * @func ApiBuyItemGet
+ * Производит покупку мерча по параметру {item} в единичном экземпляре.
+ * Не производит покупку при недостатке средств
+ */
+
 func ApiBuyItemGet(repo *repository.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
@@ -162,6 +180,12 @@ func ApiBuyItemGet(repo *repository.Repository) http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 	}
 }
+
+/**
+ * @func ApiInfoGe
+ * Выводит баланс монет пользователя, его купленный мерч (инвентарь)
+ * и историю транзакций (от кого получил и кому передал монеты)
+ */
 
 func ApiInfoGet(repo *repository.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -239,6 +263,11 @@ func ApiInfoGet(repo *repository.Repository) http.HandlerFunc {
 		_ = json.NewEncoder(w).Encode(response)
 	}
 }
+
+/**
+ * @func ApiSendCoinPost
+ * Переводит монеты от одного пользователя другому. Не производит транзакцию при недостатке монет.
+ */
 
 func ApiSendCoinPost(repo *repository.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

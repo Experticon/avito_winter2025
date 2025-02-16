@@ -1,5 +1,11 @@
 package validation
 
+/**
+ * @package validation
+ * Файл validate.go
+ * Проводит проверку валидации имени пользователя и пароля. Вызывается только в ApiAuthPost
+ */
+
 import (
 	"errors"
 	"unicode"

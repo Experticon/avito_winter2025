@@ -1,5 +1,11 @@
 package jwtutil
 
+/**
+ * @package jwtutil
+ * Файл jwtutil.go
+ * Генерирует JWT токен на 3 часа, хранит в себе имя пользователя
+ */
+
 import (
 	"time"
 
